@@ -58,13 +58,12 @@ te_intact_granges <- te_intact_files %>%
 
 
 ###########################################################################
-#  check genes of interested in vieillardii, impolita and revolutissima   #
+#                        Plot Annexin OG0000336                           #
 ###########################################################################
 
 # vieillardii "g1861"
 # revolutissima "g11314"
 # impolita "g4621"
-
 
 
 revolutissima_g11314_gene <- gene_granges$revolutissima[gene_granges$revolutissima$annotation == "g11314"]
@@ -94,6 +93,12 @@ test <- rbind(test_te, test_gene) %>% mutate(species = case_when(seqnames == "pt
                                                                  seqnames == "ptg000002l" ~ "vieillardii",
                                                                  seqnames == "Scaffolds_1151" ~ "impolita"))
 
+dummies <- make_alignment_dummies(
+  test,
+  aes(xmin = start, xmax = end, y = species, id = gene),
+  on = "Annexin"
+)
+
 pdf("annexin_OG0000336_geneplot.pdf", height=5.5, width=9)
 ggplot2::ggplot(test, ggplot2::aes(xmin = start, xmax = end,
                                             y = species, fill = gene, label = gene)) +
@@ -107,22 +112,165 @@ ggplot2::ggplot(test, ggplot2::aes(xmin = start, xmax = end,
         axis.text.y = element_text(size=14),
         axis.title = element_text(size=20),
         legend.title = element_blank()) +
+  geom_blank(data = dummies) +
   ylab("Species")
-
 dev.off()
 
 
 
+###########################################################################
+#                            Plot OG0000500                               #
+###########################################################################
+
+
+"vieillardii_braker_aa_g10152.t1"
+"impolita_braker_aa_g22665.t1"
+"revolutissima_braker_aa_g482.t1"
+
+revolutissima_g482_gene <- gene_granges$revolutissima[gene_granges$revolutissima$annotation == "g482"]
+vieillardii_g10152_gene <- gene_granges$vieillardii[gene_granges$vieillardii$annotation == "g10152"]
+impolita_g22665_gene <- gene_granges$impolita[gene_granges$impolita$annotation == "g22665"]
+
+revolutissima_g482_intact_TE <- findOverlaps(revolutissima_g482_gene, te_intact_granges$revolutissima,  maxgap = 50000)
+vieillardii_g10152_intact_TE <- findOverlaps(vieillardii_g10152_gene, te_intact_granges$vieillardii,  maxgap = 50000)
+impolita_g22665_intact_TE <- findOverlaps(impolita_g22665_gene, te_intact_granges$impolita,  maxgap = 50000)
+
+revolutissima_g482_intact_TE <- te_intact_granges$revolutissima[revolutissima_g482_intact_TE@to]
+vieillardii_g10152_intact_TE <- te_intact_granges$vieillardii[vieillardii_g10152_intact_TE@to]
+impolita_g22665_intact_TE <- te_intact_granges$impolita[impolita_g22665_intact_TE@to]
+
+OG0000500_te <- rbind(revolutissima_g482_intact_TE %>% data.frame() %>% mutate(gene="TE"), 
+                      vieillardii_g10152_intact_TE %>% data.frame() %>% mutate(gene="TE"), 
+                      impolita_g22665_intact_TE %>% data.frame()%>% mutate(gene="TE")) %>% 
+  dplyr::select(c(seqnames, gene, start, end, ph2))
+
+
+OG0000500_gene <- rbind(revolutissima_g482_gene %>% data.frame() %>% mutate(gene="PR4A"),
+                        vieillardii_g10152_gene %>% data.frame() %>% mutate(gene="PR4A"),
+                        impolita_g22665_gene %>% data.frame() %>% mutate(gene="PR4A")) %>% 
+  dplyr::select(c(seqnames, gene, start, end, ph2))
+
+test_pr4a <- rbind(OG0000500_te, OG0000500_gene) %>% mutate(species = case_when(seqnames == "ptg000001l" ~ "revolutissima",
+                                                                 seqnames == "ptg000010l" ~ "vieillardii",
+                                                                 seqnames == "Scaffolds_739" ~ "impolita"))
 
 
 
+dummies <- make_alignment_dummies(
+  test_pr4a,
+  aes(xmin = start, xmax = end, y = species, id = gene),
+  on = "PR4A"
+)
+
+pdf("PR4A_OG0000500_geneplot.pdf", height=5.5, width=9)
+ggplot2::ggplot(test_pr4a, ggplot2::aes(xmin = start, xmax = end,
+                                   y = species, fill = gene, label = gene)) +
+  geom_gene_arrow(arrow_body_height = grid::unit(10, "mm"),
+                  arrowhead_height = grid::unit(12, "mm")) +
+  #geom_gene_label(height = grid::unit(6, "mm"), grow = TRUE) +
+  ggplot2::facet_wrap(~ species, ncol = 1, scales = "free") +
+  geom_blank(data = dummies) +
+  theme_genes() +
+  theme(legend.text = element_text(size=20),
+        axis.text.x = element_text(size=11),
+        axis.text.y = element_text(size=14),
+        axis.title = element_text(size=20),
+        legend.title = element_blank()) +
+  ylab("Species")
+dev.off()
 
 
 
+###########################################################################
+#                            Plot OG0006346                               #
+###########################################################################
 
 
+"vieillardii_braker_aa_g594.t1"
+"revolutissima_braker_aa_g14832.t1"
+"impolita_braker_aa_g3611.t1"
 
 
+revolutissima_gene <- gene_granges$revolutissima[gene_granges$revolutissima$annotation == "g14832"]
+vieillardii_gene <- gene_granges$vieillardii[gene_granges$vieillardii$annotation == "g594"]
+impolita_gene <- gene_granges$impolita[gene_granges$impolita$annotation == "g3611"]
+pancheri_gene <- gene_granges$pancheri[gene_granges$pancheri$annotation == "g25218"]
+yahouensis_gene <- gene_granges$yahouensis[gene_granges$yahouensis$annotation == "g9561"]
+
+
+revolutissima_intact_TE <- findOverlaps(revolutissima_gene, te_intact_granges$revolutissima,  maxgap = 170000)
+vieillardii_intact_TE <- findOverlaps(vieillardii_gene, te_intact_granges$vieillardii,  maxgap = 170000)
+impolita_intact_TE <- findOverlaps(impolita_gene, te_intact_granges$impolita,  maxgap = 170000)
+pancheri_intact_TE <- findOverlaps(pancheri_gene, te_intact_granges$pancheri,  maxgap = 170000)
+yahouensis_intact_TE <- findOverlaps(yahouensis_gene, te_intact_granges$yahouensis,  maxgap = 170000)
+
+revolutissima_intact_TE <- te_intact_granges$revolutissima[revolutissima_intact_TE@to]
+vieillardii_intact_TE <- te_intact_granges$vieillardii[vieillardii_intact_TE@to]
+impolita_intact_TE <- te_intact_granges$impolita[impolita_intact_TE@to]
+pancheri_intact_TE <- te_intact_granges$pancheri[pancheri_intact_TE@to]
+yahouensis_intact_TE <- te_intact_granges$yahouensis[yahouensis_intact_TE@to]
+
+
+#OG0000500_te <- rbind(revolutissima_intact_TE %>% data.frame() %>% mutate(gene="TE"), 
+#                      vieillardii_intact_TE %>% data.frame() %>% mutate(gene="TE"), 
+#                      impolita_intact_TE %>% data.frame()%>% mutate(gene="TE"),
+#                      pancheri_intact_TE %>% data.frame() %>% mutate(gene="TE"),
+#                      yahouensis_intact_TE %>% data.frame() %>% mutate(gene="TE")) %>% 
+#  dplyr::select(c(seqnames, gene, start, end, ph2))
+#
+#
+#OG0000500_gene <- rbind(revolutissima_gene %>% data.frame() %>% mutate(gene="SRC2"),
+#                        vieillardii_gene %>% data.frame() %>% mutate(gene="SRC2"),
+#                        impolita_gene %>% data.frame() %>% mutate(gene="SRC2"),
+#                        pancheri_gene %>% data.frame() %>% mutate(gene="SRC2"),
+#                        yahouensis_gene %>% data.frame() %>% mutate(gene="SRC2")) %>% 
+#  dplyr::select(c(seqnames, gene, start, end, ph2))
+#
+#test_scr2 <- rbind(OG0000500_te, OG0000500_gene) %>% mutate(species = case_when(seqnames == "ptg000024l" ~ "revolutissima",
+#                                                                                seqnames == "ptg000001l" ~ "vieillardii",
+#                                                                                seqnames == "Scaffolds_1130" ~ "impolita",
+#                                                                                seqnames == "ptg000121l" ~ "pancheri",
+#                                                                                seqnames == "yahouensis_tig00007032" ~ "yahouensis"))
+#
+
+
+OG0000500_te <- rbind(revolutissima_intact_TE %>% data.frame() %>% mutate(gene="TE"), 
+                      vieillardii_intact_TE %>% data.frame() %>% mutate(gene="TE"), 
+                      impolita_intact_TE %>% data.frame()%>% mutate(gene="TE")) %>% 
+  dplyr::select(c(seqnames, gene, start, end, ph2))
+
+
+OG0000500_gene <- rbind(revolutissima_gene %>% data.frame() %>% mutate(gene="SRC2"),
+                        vieillardii_gene %>% data.frame() %>% mutate(gene="SRC2"),
+                        impolita_gene %>% data.frame() %>% mutate(gene="SRC2")) %>% 
+  dplyr::select(c(seqnames, gene, start, end, ph2))
+
+test_scr2 <- rbind(OG0000500_te, OG0000500_gene) %>% mutate(species = case_when(seqnames == "ptg000024l" ~ "revolutissima",
+                                                                                seqnames == "ptg000001l" ~ "vieillardii",
+                                                                                seqnames == "Scaffolds_1130" ~ "impolita"))
+
+dummies <- make_alignment_dummies(
+  test_scr2,
+  aes(xmin = start, xmax = end, y = species, id = gene),
+  on = "SRC2"
+)
+
+pdf("SRC2_OG0006346_geneplot.pdf", height=5.5, width=9)
+ggplot2::ggplot(test_scr2, ggplot2::aes(xmin = start, xmax = end,
+                                        y = species, fill = gene, label = gene)) +
+  geom_gene_arrow(arrow_body_height = grid::unit(10, "mm"),
+                  arrowhead_height = grid::unit(12, "mm")) +
+  #geom_gene_label(height = grid::unit(6, "mm"), grow = TRUE) +
+  ggplot2::facet_wrap(~ species, ncol = 1, scales = "free") +
+  geom_blank(data = dummies) +
+  theme_genes() +
+  theme(legend.text = element_text(size=20),
+        axis.text.x = element_text(size=11),
+        axis.text.y = element_text(size=14),
+        axis.title = element_text(size=20),
+        legend.title = element_blank()) +
+  ylab("Species")
+dev.off()
 
 
 
