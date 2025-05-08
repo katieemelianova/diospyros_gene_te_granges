@@ -2,33 +2,7 @@
 library(GenomicRanges)
 library(gggenes)
 library(plyranges)
-
-
-
-
-#########################################################
-#                read in gene annotation                #
-#########################################################
-
-read_genes <- function(gff){
-  genes_gff <- read_delim(gff, col_names = FALSE) %>%
-    set_colnames(c("seqname", "method", "feature", "start", "end", "ph1", "ph2", "ph3", "annotation")) %>% 
-    GRanges()
-  return(genes_gff)
-}
-
-gene_files <- c("/Users/katieemelianova/Desktop/Diospyros/IGVdata/impolita/impolita_braker.gtf",
-                "/Users/katieemelianova/Desktop/Diospyros/IGVdata/sandwicensis/sandwicensis_braker.gtf",
-                "/Users/katieemelianova/Desktop/Diospyros/IGVdata/pancheri/pancheri_braker.gtf",
-                "/Users/katieemelianova/Desktop/Diospyros/IGVdata/vieillardii/vieillardii_braker.gtf",
-                "/Users/katieemelianova/Desktop/Diospyros/IGVdata/revolutissima/revolutissima_braker.gtf",
-                "/Users/katieemelianova/Desktop/Diospyros/IGVdata/yahouensis/yahouensis_braker.gtf")
-
-
-gene_granges <- gene_files %>%
-  lapply(read_genes) %>% 
-  set_names(c("impolita", "sandwicensis", "pancheri", "vieillardii", "revolutissima", "yahouensis"))
-
+source("/Users/katieemelianova/Desktop/Diospyros/diospyros_R_functions/diospyros_genome_annotation.R")
 
 
 
@@ -36,42 +10,103 @@ gene_granges <- gene_files %>%
 #                read in gene annotation                #
 #########################################################
 
-read_tes <- function(gff){
-  tes_gff <- read_delim(gff) %>%
-    set_colnames(c("seqname", "method", "feature", "start", "end", "ph1", "ph2", "ph3", "annotation")) %>%
-    filter(feature == "repeat_region") %>%
-    GRanges()
-  return(tes_gff)
-}
+gene_granges <- get_braker_annotation()
 
-te_intact_files <- c("/Users/katieemelianova/Desktop/Diospyros/IGVdata/impolita/impolita.fasta.mod.EDTA.intact.noheader.seqnames.gff3",
-                     "/Users/katieemelianova/Desktop/Diospyros/IGVdata/pancheri/pancheri.fasta.mod.EDTA.intact.noheader.gff3",
-                     "/Users/katieemelianova/Desktop/Diospyros/IGVdata/revolutissima/revolutissima.fasta.mod.EDTA.intact.noheader.gff3",
-                     "/Users/katieemelianova/Desktop/Diospyros/IGVdata/sandwicensis/sandwicensis.fasta.mod.EDTA.intact.noheader.gff3",
-                     "/Users/katieemelianova/Desktop/Diospyros/IGVdata/vieillardii/vieillardii.fasta.mod.EDTA.intact.noheader.gff3",
-                     "/Users/katieemelianova/Desktop/Diospyros/IGVdata/yahouensis/yahouensis.fasta.mod.EDTA.intact.noheader.gff3")
+#########################################################
+#                read in EDTA annotation                #
+#########################################################
 
-te_intact_granges <- te_intact_files %>%
-  lapply(read_tes) %>% 
-  set_names(c("impolita", "pancheri", "revolutissima", "sandwicensis", "vieillardii", "yahouensis"))
+te_intact_granges <- get_edta_intact_annotation()
+
+impolita_te_granges <- te_intact_granges$impolita_edta_intact %>%
+  separate(annotation, sep=";", c("ID", "Name", "Classification", "sequence_ontology")) %>%
+  filter(str_detect(Name, "^Name")) %>%     # keep only entries where the TE is the parent TE
+  separate(Name, sep="=", c("ph1", "Name")) %>%
+  dplyr::select(-ph1)
+
+impolita_te_granges$seqname <- paste0("Scaffolds_", impolita_te_granges$seqname) # change back names to match braker contigs names, EDTA edits them to make them shorter
+
+
+
+
+#########################################################
+#              read in TEsorter annotation              #
+#########################################################
+
+tesorter_granges <- get_tesorter_annotation()
+
+impolita_tesorter <- tesorter_granges$impolita_tesorter %>%
+  separate(detail, sep="#", c("Name", "ph1")) %>%
+  separate(Name, sep="=", c("ph2", "Name")) %>%
+  mutate(Name=str_remove(Name, "_INT")) %>%
+  dplyr::select(-c(ph1, ph2))
 
 # get gene and TE density using this method:
 # https://www.biostars.org/p/169171/
 
+
+
+#########################################################
+#              read in TEsorter annotation              #
+#########################################################
+
+impolita_classified_te_intact_granges <- left_join(impolita_te_granges, impolita_tesorter, by="Name", relationship = "many-to-many") %>% dplyr::select(seqname, method, feature, start, end, Name, Classification, superclass, clade) %>% unique() %>% GRanges()
+
+
+
+#########################################################
+#              read in TEsorter annotation              #
+#########################################################
+
+
 impolita_seqlengths <- read.table("/Users/katieemelianova/Desktop/Diospyros/IGVdata/impolita/impolita.seqlengths")
 impolita_seqlengths <- Seqinfo(seqnames=impolita_seqlengths$V1, seqlengths=impolita_seqlengths$V2)
-impolita_te_granges <- te_intact_granges$impolita
-impolita_gene_granges <- gene_granges$impolita %>% plyranges::filter(feature == "transcript")
-impolita_tiles <- tileGenome(impolita_seqlengths, tilewidth=100000, cut.last.tile.in.chrom=T)
-impolita_tiles$total_tes = countOverlaps(impolita_tiles, impolita_te_granges)
+impolita_gene_granges <- gene_granges$impolita %>% GRanges() %>% plyranges::filter(feature == "transcript")
+impolita_tiles <- tileGenome(impolita_seqlengths, tilewidth=10000, cut.last.tile.in.chrom=T)
+impolita_tiles$total_tes = countOverlaps(impolita_tiles, impolita_classified_te_intact_granges)
 impolita_tiles$total_genes = countOverlaps(impolita_tiles, impolita_gene_granges)
 
-plot(impolita_tiles$total_tes, impolita_tiles$total_genes)
 
 
-impolita_tiles$total_tes %>% summary()
-impolita_tiles$total_genes %>% summary()
 
+impolita_clade_counts <- impolita_classified_te_intact_granges$clade %>% table() %>% data.frame() %>% set_colnames(c("clade", "freq"))
+test_hidensity <- impolita_tiles %>% plyranges::filter(total_tes >= 1 & total_genes >= 2) %>% findOverlaps(impolita_classified_te_intact_granges)
+test_lodensity <- impolita_tiles %>% plyranges::filter(total_tes >= 1 & total_genes == 0) %>% findOverlaps(impolita_classified_te_intact_granges)
+
+# I think that some percentages are over 100% because of some TEs spanning multiple windows
+# need to sanity check this
+
+rbind(impolita_classified_te_intact_granges[test_hidensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="high") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(impolita_clade_counts, by="clade"),
+      impolita_classified_te_intact_granges[test_lodensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="low") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(impolita_clade_counts, by="clade")) %>%
+  mutate(percent_freq=(freq.x/freq.y) * 100) %>%
+  filter(!(clade %in% c("Ty3_gypsy", "Ty1_copia", "chromo-unclass"))) %>%
+  ggplot(aes(x=clade, y=percent_freq, fill=density)) +
+  geom_bar(stat="identity")
+
+
+
+
+
+
+
+summary(impolita_tiles$total_tes)
+summary(impolita_tiles$total_genes)
+
+# ask which TE classes are found how frequently in the same window as genes
+
+
+
+mp<-readMappings("/Users/katieemelianova/Desktop/Diospyros/diospyros_gene_te_overlap/impolita_topGO_annotation.txt")
+impolita_annotation <- read_delim("/Users/katieemelianova/Desktop/Diospyros/diospyros_gene_te_overlap/impolita_topGO_annotation.txt")
+
+test <- findOverlaps(impolita_gene_granges, impolita_tiles %>% plyranges::filter(total_genes > 5 & total_tes > 5))
+test2 <- impolita_gene_granges[test@from]$annotation
+test2 %>% get_enriched_terms(mp, return_sample_GOData=TRUE)
+
+
+
+
+impolita_annotation %>% filter(ID %in% test2) %>% pull(GO)
 
 
 imp_overlaps <- findOverlaps(gene_granges$impolita, te_intact_granges$impolita)
