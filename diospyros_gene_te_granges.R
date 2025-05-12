@@ -95,8 +95,10 @@ tile_genome <- function(seqlengths, gene_grange, classified_te_grange){
   # get high and low density tiles, get the overlap with the annotated TE object and get the clades present in high and low density regions
   hidensity <- tiles %>% plyranges::filter(total_tes >= 1 & total_genes >= 20) %>% findOverlaps(classified_te_grange)
   lodensity <- tiles %>% plyranges::filter(total_tes >= 1 & total_genes == 0) %>% findOverlaps(classified_te_grange)
+  totdensity <- clade_counts %>% mutate(density="total", freq.y=freq) %>% set_colnames(c("clade", "freq.x", "density", "freq.y"))
   to_return <- rbind(classified_te_grange[hidensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="high") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(clade_counts, by="clade"),
                      classified_te_grange[lodensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="low") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(clade_counts, by="clade")) %>%
+    rbind(totdensity) %>%
     mutate(percent_freq=(freq.x/freq.y) * 100) %>%
     filter(!(clade %in% c("Ty3_gypsy", "Ty1_copia", "chromo-unclass")))
   
@@ -119,14 +121,32 @@ vieillardii_tiles <- tile_genome("/Users/katieemelianova/Desktop/Diospyros/IGVda
   mutate(species="vieillardii")
 
 
-rbind(impolita_tiles,
+# find clades which are not present in all three species, we wont plot these
+include_clades <- rbind(impolita_tiles,
       revolutissima_tiles,
-      vieillardii_tiles) %>% 
-  ggplot(aes(x=clade, y=percent_freq, fill=density)) +
-  geom_bar(stat="identity") +
-  facet_wrap(~species, ncol = 1)
+      vieillardii_tiles)%>%
+  dplyr::select(-c(freq.x, freq.y)) %>%
+  melt() %>%
+  dplyr::count(clade) %>%
+  tibble() %>%
+  filter(n >=3) %>%
+  pull(clade) %>%
+  as.character()
 
-  
+
+
+
+
+rbind(impolita_tiles,
+        revolutissima_tiles,
+        vieillardii_tiles) %>%
+  mutate(density=factor(density, levels=c("low", "high", "total"))) %>% 
+  arrange(desc(density)) %>%
+  filter(clade %in% include_clades) %>%
+  ggplot(aes(x=clade, y=sqrt(freq.x), fill=density)) +
+  geom_bar(stat="identity", position = "identity", alpha=0.7) +
+  facet_wrap(~species, ncol = 1) +
+  scale_fill_manual(values=c("blue", "red", "grey67"))
 
 # have a look to see how many TEs span more than one window
 # I increased window size to 1MB because 
@@ -143,14 +163,6 @@ findOverlaps(revolutissima_tiles, revolutissima_classified_te_intact_granges) %>
 
 
 
-
-
-
-
-summary(impolita_tiles$total_tes)
-summary(impolita_tiles$total_genes)
-
-# ask which TE classes are found how frequently in the same window as genes
 
 
 
