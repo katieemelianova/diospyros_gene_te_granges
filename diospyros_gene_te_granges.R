@@ -24,10 +24,20 @@ impolita_te_granges <- te_intact_granges$impolita_edta_intact %>%
   separate(Name, sep="=", c("ph1", "Name")) %>%
   dplyr::select(-ph1)
 
-impolita_te_granges$seqname <- paste0("Scaffolds_", impolita_te_granges$seqname) # change back names to match braker contigs names, EDTA edits them to make them shorter
+# change back names to match braker contigs names, EDTA edits them to make them shorter (only an issue in impolita)
+impolita_te_granges$seqname <- paste0("Scaffolds_", impolita_te_granges$seqname) 
 
+revolutissima_te_granges <- te_intact_granges$revolutissima_edta_intact %>%
+  separate(annotation, sep=";", c("ID", "Name", "Classification", "sequence_ontology")) %>%
+  filter(str_detect(Name, "^Name")) %>%     # keep only entries where the TE is the parent TE
+  separate(Name, sep="=", c("ph1", "Name")) %>%
+  dplyr::select(-ph1)
 
-
+vieillardii_te_granges <- te_intact_granges$vieillardii_edta_intact %>%
+  separate(annotation, sep=";", c("ID", "Name", "Classification", "sequence_ontology")) %>%
+  filter(str_detect(Name, "^Name")) %>%     # keep only entries where the TE is the parent TE
+  separate(Name, sep="=", c("ph1", "Name")) %>%
+  dplyr::select(-ph1)
 
 #########################################################
 #              read in TEsorter annotation              #
@@ -41,47 +51,95 @@ impolita_tesorter <- tesorter_granges$impolita_tesorter %>%
   mutate(Name=str_remove(Name, "_INT")) %>%
   dplyr::select(-c(ph1, ph2))
 
+revolutissima_tesorter <- tesorter_granges$revolutissima_tesorter %>%
+  separate(detail, sep="#", c("Name", "ph1")) %>%
+  separate(Name, sep="=", c("ph2", "Name")) %>%
+  mutate(Name=str_remove(Name, "_INT")) %>%
+  dplyr::select(-c(ph1, ph2))
+
+vieillardii_tesorter <- tesorter_granges$vieillardii_tesorter %>%
+  separate(detail, sep="#", c("Name", "ph1")) %>%
+  separate(Name, sep="=", c("ph2", "Name")) %>%
+  mutate(Name=str_remove(Name, "_INT")) %>%
+  dplyr::select(-c(ph1, ph2))
 # get gene and TE density using this method:
 # https://www.biostars.org/p/169171/
 
 
 
 #########################################################
-#              read in TEsorter annotation              #
+#           join EDTA and TEsorter annotation           #
 #########################################################
 
 impolita_classified_te_intact_granges <- left_join(impolita_te_granges, impolita_tesorter, by="Name", relationship = "many-to-many") %>% dplyr::select(seqname, method, feature, start, end, Name, Classification, superclass, clade) %>% unique() %>% GRanges()
+revolutissima_classified_te_intact_granges <- left_join(revolutissima_te_granges, revolutissima_tesorter, by="Name", relationship = "many-to-many") %>% dplyr::select(seqname, method, feature, start, end, Name, Classification, superclass, clade) %>% unique() %>% GRanges()
+vieillardii_classified_te_intact_granges <- left_join(vieillardii_te_granges, vieillardii_tesorter, by="Name", relationship = "many-to-many") %>% dplyr::select(seqname, method, feature, start, end, Name, Classification, superclass, clade) %>% unique() %>% GRanges()
 
 
 
 #########################################################
-#              read in TEsorter annotation              #
+#      tile genomes and plot gene and TE density        #
 #########################################################
 
+tile_genome <- function(seqlengths, gene_grange, classified_te_grange){
+  # tile genome using seqlengths generated with bioawk
+  seqlengths <- read.table(seqlengths)
+  seqlengths <- Seqinfo(seqnames=seqlengths$V1, seqlengths=seqlengths$V2)
+  gene_grange <- gene_grange %>% GRanges() %>% plyranges::filter(feature == "transcript")
+  tiles <- tileGenome(seqlengths, tilewidth=1000000, cut.last.tile.in.chrom=T)
+  # count overlaps of tiles with genes and TEs
+  tiles$total_tes = countOverlaps(tiles, classified_te_grange, ignore.strand=TRUE)
+  tiles$total_genes = countOverlaps(tiles, gene_grange, ignore.strand=TRUE)
+  # get clade counts- these are used to calculate the percent of each TE clade in high and low gene density regions
+  clade_counts <- classified_te_grange$clade %>% table() %>% data.frame() %>% set_colnames(c("clade", "freq"))
+  # get high and low density tiles, get the overlap with the annotated TE object and get the clades present in high and low density regions
+  hidensity <- tiles %>% plyranges::filter(total_tes >= 1 & total_genes >= 20) %>% findOverlaps(classified_te_grange)
+  lodensity <- tiles %>% plyranges::filter(total_tes >= 1 & total_genes == 0) %>% findOverlaps(classified_te_grange)
+  to_return <- rbind(classified_te_grange[hidensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="high") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(clade_counts, by="clade"),
+                     classified_te_grange[lodensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="low") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(clade_counts, by="clade")) %>%
+    mutate(percent_freq=(freq.x/freq.y) * 100) %>%
+    filter(!(clade %in% c("Ty3_gypsy", "Ty1_copia", "chromo-unclass")))
+  
+  return(to_return)
+}
 
-impolita_seqlengths <- read.table("/Users/katieemelianova/Desktop/Diospyros/IGVdata/impolita/impolita.seqlengths")
-impolita_seqlengths <- Seqinfo(seqnames=impolita_seqlengths$V1, seqlengths=impolita_seqlengths$V2)
-impolita_gene_granges <- gene_granges$impolita %>% GRanges() %>% plyranges::filter(feature == "transcript")
-impolita_tiles <- tileGenome(impolita_seqlengths, tilewidth=10000, cut.last.tile.in.chrom=T)
-impolita_tiles$total_tes = countOverlaps(impolita_tiles, impolita_classified_te_intact_granges)
-impolita_tiles$total_genes = countOverlaps(impolita_tiles, impolita_gene_granges)
+impolita_tiles <- tile_genome("/Users/katieemelianova/Desktop/Diospyros/IGVdata/impolita/impolita.seqlengths",
+            gene_granges$impolita_braker,
+            impolita_classified_te_intact_granges) %>%
+  mutate(species="impolita")
+
+revolutissima_tiles <- tile_genome("/Users/katieemelianova/Desktop/Diospyros/IGVdata/revolutissima/revolutissima.seqlengths",
+                              gene_granges$revolutissima_braker,
+                              revolutissima_classified_te_intact_granges) %>%
+  mutate(species="revolutissima")
+
+vieillardii_tiles <- tile_genome("/Users/katieemelianova/Desktop/Diospyros/IGVdata/vieillardii/vieillardii.seqlengths",
+                                 gene_granges$vieillardii_braker,
+                                 vieillardii_classified_te_intact_granges) %>%
+  mutate(species="vieillardii")
 
 
-
-
-impolita_clade_counts <- impolita_classified_te_intact_granges$clade %>% table() %>% data.frame() %>% set_colnames(c("clade", "freq"))
-test_hidensity <- impolita_tiles %>% plyranges::filter(total_tes >= 1 & total_genes >= 2) %>% findOverlaps(impolita_classified_te_intact_granges)
-test_lodensity <- impolita_tiles %>% plyranges::filter(total_tes >= 1 & total_genes == 0) %>% findOverlaps(impolita_classified_te_intact_granges)
-
-# I think that some percentages are over 100% because of some TEs spanning multiple windows
-# need to sanity check this
-
-rbind(impolita_classified_te_intact_granges[test_hidensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="high") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(impolita_clade_counts, by="clade"),
-      impolita_classified_te_intact_granges[test_lodensity@to %>% unique()] %>% data.frame() %>% pull(clade) %>% table() %>% data.frame() %>% mutate(density="low") %>% set_colnames(c("clade", "freq", "density")) %>% left_join(impolita_clade_counts, by="clade")) %>%
-  mutate(percent_freq=(freq.x/freq.y) * 100) %>%
-  filter(!(clade %in% c("Ty3_gypsy", "Ty1_copia", "chromo-unclass"))) %>%
+rbind(impolita_tiles,
+      revolutissima_tiles,
+      vieillardii_tiles) %>% 
   ggplot(aes(x=clade, y=percent_freq, fill=density)) +
-  geom_bar(stat="identity")
+  geom_bar(stat="identity") +
+  facet_wrap(~species, ncol = 1)
+
+  
+
+# have a look to see how many TEs span more than one window
+# I increased window size to 1MB because 
+findOverlaps(revolutissima_tiles, revolutissima_classified_te_intact_granges) %>% 
+  data.frame() %>% 
+  pull(subjectHits) %>%
+  table() %>% 
+  sort(decreasing = TRUE) %>% 
+  data.frame()
+
+
+
+
 
 
 
